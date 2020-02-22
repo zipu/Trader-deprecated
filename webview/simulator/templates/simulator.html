@@ -1,0 +1,161 @@
+{% load static %}
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>Simulator</title>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <script src="https://code.jquery.com/jquery-3.4.1.min.js"
+    integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+  <script src="https://code.highcharts.com/stock/highstock.src.js"></script>
+</head>
+
+<body class="container" style="max-width: 900px;">
+  <div id="futures-chart" style="margin: auto;"></div>
+  <div>
+   {% for  instrument in instruments  %}
+    <button onclick="update('{{instrument.code}}','{{instrument.name}}')">
+        {{instrument.name}}</button>
+    </button>
+   {% endfor %}
+  </div>
+</body>
+<script>
+var chart = Highcharts.stockChart('futures-chart', {
+        chart: { height: '75%' },
+        
+        yAxis: [{
+            labels: {
+                align: 'left'
+            },
+            height: '80%',
+            resize: {
+                enabled: true
+            }
+        }, {
+            labels: {
+                align: 'left'
+            },
+            top: '80%',
+            height: '20%',
+            offset: 0
+        }],
+        tooltip: {
+            shape: 'square',
+            headerShape: 'callout',
+            borderWidth: 0,
+            shadow: false,
+            positioner: function (width, height, point) {
+                var chart = this.chart,
+                    position;
+
+                if (point.isHeader) {
+                    position = {
+                        x: Math.max(
+                            // Left side limit
+                            chart.plotLeft,
+                            Math.min(
+                                point.plotX + chart.plotLeft - width / 2,
+                                // Right side limit
+                                chart.chartWidth - width - chart.marginRight
+                            )
+                        ),
+                        y: point.plotY
+                    };
+                } else {
+                    position = {
+                        x: point.series.chart.plotLeft,
+                        y: point.series.yAxis.top - chart.plotTop
+                    };
+                }
+
+                return position;
+            }
+        },
+        rangeSelector: {
+            allButtonsEnabled: true,
+            buttons: [{
+                type: 'all',
+                text: 'All',
+            }, {
+                type: 'year',
+                count: 3,
+                text: '3Y',
+            }, {
+                type: 'year',
+                count: 1,
+                text: '1Y',
+            }, {
+                type: 'month',
+                count: 6,
+                text: '6m',
+            }],
+            selected: 2
+        },
+        responsive: {
+            rules: [{
+                condition: {
+                    maxWidth: 800
+                },
+                chartOptions: {
+                    rangeSelector: {
+                        inputEnabled: false
+                    }
+                }
+            }]
+        }
+        });
+
+function update(code, name){
+    url = "/chart/"+code
+    while(chart.series.length > 0){
+        chart.series[0].remove(true);
+    };
+    
+    $.get(url, function( data ) {
+        var data = data;
+        var ohlc = [],
+        volume = [],
+        dataLength = data.length,
+        i = 0;
+
+        for (i; i < dataLength; i += 1) {
+            ohlc.push([
+                data[i][0], // the date
+                data[i][1], // open
+                data[i][2], // high
+                data[i][3], // low
+                data[i][4] // close
+            ]);
+
+            volume.push([
+                data[i][0], // the date
+                data[i][5] // the volume
+            ]);
+        }
+
+        chart.setTitle({ text: name });
+        chart.addSeries( {
+                type: 'ohlc',
+                id: 'ohlc',
+                name: 'Price',
+                color: 'black',
+                data: ohlc,
+                yAxis: 0
+            });
+
+        chart.addSeries( {
+                type: 'column',
+                id: 'volume',
+                name: 'Volume',
+                color: 'cyon',
+                pointWidth: '2',
+                data: volume,
+                yAxis: 1
+            });
+    });
+};
+
+</script>
+</html>
