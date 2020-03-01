@@ -6,26 +6,65 @@
   <title>Simulator</title>
   <!-- Required meta tags -->
   <meta charset="utf-8">
+  <style>
+    table, th, td {
+        border: 1px solid black;
+        border-collapse: collapse;
+    }
+  </style>
   <script src="https://code.jquery.com/jquery-3.4.1.min.js"
     integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
   <script src="https://code.highcharts.com/stock/highstock.src.js"></script>
 </head>
 
-<body class="container" style="max-width: 900px;">
-  <div id="futures-chart" style="margin: auto;"></div>
+<body class="container" style="max-width: 1000px; margin: auto;">
+  <div id="information" style="margin-top: 10px; ">
+    <p style="display:contents;"> 최종 업데이트: {{ last_update }} </p>
+    <button type="button" id='update-btn' onclick="update();">업데이트</button>   
+    <label id="update-status" style='display: inline-block'>
+  </div>
+  </br>
+  <div id="futures-chart" style="margin: auto; max-width: 900px;"></div>
+  </br>
+  <div style='margin-bottom: 30px'>
+    <table style="width: 90%; margin:auto; border: 1px solid black;">
+     <tr>
+        <th style='width:12.5%'>Sector 1</th>
+        <th style='width:12.5%'>Sector 2</th>
+        <th style='width:12.5%'>Sector 3</th>
+        <th style='width:12.5%'>Sector 4</th>
+        <th style='width:12.5%'>Sector 5</th>
+        <th style='width:12.5%'>Sector 6</th>
+        <th style='width:12.5%'>Sector 7</th>
+        <th style='width:12.5%'>Sector 8</th>
+     </tr>
+     <tr>
+        {% for sector in sectors%}
+         <td valign="top"> {% for instrument in sector %} 
+            <button style="width: 100%" 
+                onclick="draw('{{instrument.code}}','{{instrument.name}}')">
+                {{instrument.name}}
+            </button></br>
+              {% endfor %}
+        </td>
+        {% endfor %}
+    </table>
+  </div>
   <div>
    {% for  instrument in instruments  %}
-    <button onclick="update('{{instrument.code}}','{{instrument.name}}')">
+    <button onclick="draw('{{instrument.code}}','{{instrument.name}}')">
         {{instrument.name}}</button>
     </button>
    {% endfor %}
   </div>
+  </br>
 </body>
 <script>
 var chart = Highcharts.stockChart('futures-chart', {
         chart: { height: '75%' },
-        
+        xAxis: [{crosshair:{snap:false}},{}],
         yAxis: [{
+            crosshair: {snap: false},
             labels: {
                 align: 'left'
             },
@@ -107,7 +146,7 @@ var chart = Highcharts.stockChart('futures-chart', {
         }
         });
 
-function update(code, name){
+function draw(code, name){
     url = "/chart/"+code
     while(chart.series.length > 0){
         chart.series[0].remove(true);
@@ -154,6 +193,30 @@ function update(code, name){
                 data: volume,
                 yAxis: 1
             });
+    });
+};
+
+function update(){
+    $('#update-btn').prop('disabled', true);
+    var obj = $('#update-status');
+    
+    // data == true : 업데이트 진행중
+    // data == false: 진행 완료
+    $.get("/update?action=start", function( data ) {
+      if (data==true){
+        var i = 0;
+        var timer = setInterval(function() {
+            $.get("/update", function(data){
+                s = '.'.repeat(i%5);
+                obj.text('('+i+'s)'+'  업데이트중.'+s);
+                i++;
+                if (data==false){
+                    location.reload();
+                    clearInterval(timer);
+                } 
+            })
+        }, 1000);
+      }
     });
 };
 

@@ -1,1 +1,1 @@
-from chart import bar_chart
+from .chart import bar_chart

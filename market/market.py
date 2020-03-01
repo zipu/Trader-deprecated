@@ -9,6 +9,14 @@ import h5py
 import quandl
 import pandas as pd
 
+# meachine learning
+import numpy as np
+from sklearn.cluster import KMeans
+from tslearn.clustering import TimeSeriesKMeans
+from tslearn.utils import to_time_series
+
+
+
 quandl.ApiConfig.api_key = "6GRDzQGAm5PpBzWdcBT5"
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -41,20 +49,25 @@ class Instrument:
     def __repr__(self):
         return f"{self.name}({self.symbol})"
     
-    def history(self, length=0):
+    def history(self, start=0, length=0):
         db = h5py.File(HISTORYFILE, mode='r')
-        history = db[self.code][-length:] if length else db[self.code][:]
+        if start == 0:
+            history = db[self.code][:]
+        elif length == 0:
+            history = db[self.code][-start:]
+        else:
+            history = db[self.code][-start:-start+length]
         db.close()
         return history
     
-    def to_df(self, length=0):
+    def to_df(self, start=0, length=0):
         """
         * 한 상품의 ohlcv 데이터를 pandas dataframe 형식으로 바꿔주는 함수
         * Output:
           - pandas dataframe
         """
         columns = ['date','open','high','low','close','volume','op_int']
-        df = pd.DataFrame(data=self.history(length), columns=columns)
+        df = pd.DataFrame(data=self.history(start, length), columns=columns)
         df['date'] = df['date'].astype('M8[ms]')
         df.set_index('date', inplace=True)
         return df
@@ -136,10 +149,12 @@ class Instruments:
         
         db = h5py.File(HISTORYFILE, mode='w')
         db.attrs['columns'] = 'date;open;high;low;close;volume;op_int'
+        db.attrs['last_update'] = str(datetime.today().date())
         print("*** 업데이트 시작... ***")
         for instrument in instruments:
             if instrument['has_history'] == 'y':
                 print(instrument['name'])
+                
                 exch = instrument['exchange'].lower()
                 symbol = instrument['symbol'].lower()
                 depth = instrument['depth']
@@ -153,3 +168,43 @@ class Instruments:
                 group.attrs['name'] = instrument['name'].lower()
                 group.attrs['code'] = code.lower()
         print("*** 완료 ***")
+
+    #최종 업데이트 날짜
+    @staticmethod
+    def last_update():
+        db = h5py.File(HISTORYFILE, mode='r')
+        last = db.attrs['last_update']
+        db.close()
+        return last
+
+    #자동 섹터 분류
+    @staticmethod
+    def define_sectors(window=40):
+        instruments = Instruments.get(is_tradable=True, has_history=True)
+        codes = [instrument.code for instrument in instruments]
+        arr = []
+        for a in instruments:
+            b = a.history(start=window)[:,1:5]
+            b = (b-b.min())/(b.max()-b.min()) #data normalize
+            arr.append(b)
+        arr = np.array(arr)
+        km = TimeSeriesKMeans(n_clusters=8, n_init=200, max_iter=300).fit(arr)
+        n_codes = np.array(codes)
+        sectors = [n_codes[np.where(km.labels_ == i)[0]].tolist() for i in range(8)]
+        
+        #db파일에 attribute로 저장
+        db = h5py.File(HISTORYFILE, mode='r+')
+        # 섹터내의 종목들은 ';' 로, 섹터들은 '/' 로 구분됨
+        # ex) 'ice_dx;ice_sb/cme_bp;cme_c;cme_o;cme_pl;cme_rb;cme_rr;cme_si'
+        db.attrs['sectors'] = '/'.join([';'.join(sector) for sector in sectors])
+        db.close()
+
+    @staticmethod
+    def sectors():
+        db = h5py.File(HISTORYFILE, mode='r')
+        sectors = db.attrs['sectors']
+        db.close()
+        codes = [ sector.split(';') for sector in sectors.split('/') ]
+        return [[ Instruments.get(code=c)[0] for c in i ] for i in codes]
+
+        
